@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "YuNi-tab",
+  "version": "1.0",
+  "description": "屿你新标签页 — 液态玻璃搜索框 · 旋转辉光边框 · 动态视频壁纸库 · Bing 搜索建议下拉 | Yuni New Tab — Liquid-glass search, rotating glow border, video wallpaper library, Bing suggestions",
+  "chrome_url_overrides": { "newtab": "newtab.html" },
+  "host_permissions": [
+    "*://api.bing.com/*"
+  ],
+  "background": {
+    "service_worker": "worker.js"
+  }
+}

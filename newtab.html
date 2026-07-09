@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>新标签页</title>
+<style>
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+  }
+
+  #wrap {
+    width: 90%; max-width: 560px; position: relative;
+    animation: fadeUp .6s cubic-bezier(.2, .8, .2, 1);
+    transition: opacity .5s cubic-bezier(.2,.8,.2,1), transform .5s cubic-bezier(.2,.8,.2,1);
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* 搜索框外壳：承载旋转辉光 */
+  .field {
+    position: relative; border-radius: 26px;
+    transition: transform .25s;
+  }
+  .field:hover { transform: scale(1.04); }
+
+  /* 泛光分层：每层是个 overflow:hidden 的小窗口，里面垫一个超大旋转锥形渐变。
+     转的是渐变，窗口不动 —— 所以光沿边框跑，无方块感。 */
+  .glow, .white, .border {
+    position: absolute; inset: 0; z-index: 0;
+    border-radius: 26px; overflow: hidden; pointer-events: none;
+  }
+  .border { inset: -1px; filter: blur(.4px); opacity: .9; }
+  .white  { inset: -1px; filter: blur(1px); opacity: .7; }
+  .glow   { inset: -3px; filter: blur(8px); opacity: .55; }
+
+  .glow::before, .white::before, .border::before {
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 600px; height: 600px; background-repeat: no-repeat;
+    transform: translate(-50%, -50%) rotate(0deg);
+    animation: spin 10s linear infinite;
+  }
+  .border::before {
+    filter: brightness(1.3);
+    background-image: conic-gradient(transparent, #0078d4 8%, transparent 20%,
+      transparent 50%, #cf30aa 60%, transparent 72%);
+  }
+  .white::before {
+    filter: brightness(1.4);
+    background-image: conic-gradient(transparent, #7aa8e8 8%, transparent 22%,
+      transparent 50%, #e0a2da 60%, transparent 74%);
+    animation-delay: -.2s;
+  }
+  .glow::before {
+    width: 820px; height: 820px;
+    background-image: conic-gradient(transparent, #0078d4 8%, transparent 30%,
+      transparent 50%, #cf30aa 62%, transparent 85%);
+    animation-delay: -.4s;
+  }
+
+  @keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+
+  /* 悬停 / 聚焦时泛光更亮（转速保持不变，避免重置跳位）*/
+  .field:hover .glow, .field:focus-within .glow { opacity: .85; }
+  .field:hover .white, .field:focus-within .white { opacity: 1; }
+  .field:hover .border, .field:focus-within .border { opacity: 1; }
+
+  form {
+    position: relative; z-index: 1;
+    display: flex; align-items: center;
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 26px;
+    padding: 4px 6px 4px 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.08);
+    transition: box-shadow .25s, border-color .25s;
+    overflow: hidden;
+  }
+  /* 液态边缘色散扭曲 */
+  form::before {
+    content: ''; position: absolute; inset: -6px; z-index: 0;
+    border-radius: inherit; pointer-events: none;
+    border: 2px solid rgba(255,255,255,0.5);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18),
+                inset 0 0 24px rgba(255,255,255,0.08);
+    filter: url(#liquid-glass-filter);
+    opacity: 0.55;
+  }
+  /* 渐变描边高光 */
+  form::after {
+    content: ''; position: absolute; inset: 0; z-index: 2;
+    border-radius: inherit; pointer-events: none;
+    padding: 1.5px;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    background: linear-gradient(135deg,
+      rgba(255,255,255,0) 0%, rgba(255,255,255,0.16) 33%,
+      rgba(255,255,255,0.4) 66%, rgba(255,255,255,0) 100%);
+  }
+  /* 输入框 / 按钮浮在玻璃层之上 */
+  form input, form button { position: relative; z-index: 3; }
+
+  .field:hover form { box-shadow: 0 4px 18px rgba(0,0,0,.12); }
+  .field:focus-within form {
+    border-color: transparent;
+    box-shadow: 0 4px 18px rgba(0,120,212,.15);
+  }
+
+  input[name="q"] {
+    flex: 1; border: none; outline: none; background: transparent;
+    font-size: 17px; padding: 12px 8px; color: #222;
+  }
+  button {
+    border: none; cursor: pointer; width: 42px; height: 42px;
+    border-radius: 50%; background: #0078d4; color: #fff; font-size: 17px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, transform .15s;
+  }
+  button:hover { background: #106ebe; transform: scale(1.08); }
+
+  #hint {
+    height: 22px; line-height: 22px; margin-top: 10px;
+    font-size: 13px; color: #e81123;
+    opacity: 0; transform: translateY(-6px);
+    transition: opacity .3s, transform .3s;
+  }
+  #hint.show { opacity: 1; transform: translateY(0); }
+
+  /* 搜索建议下拉 —— 液态玻璃 */
+  #suggest {
+    position: absolute; top: 100%; left: 0; right: 0;
+    list-style: none; margin: 10px 0 0 0; padding: 8px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(30px) saturate(180%);
+    -webkit-backdrop-filter: blur(30px) saturate(180%);
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.6),
+      0 12px 40px rgba(0, 0, 0, 0.10),
+      0 4px 12px rgba(0, 0, 0, 0.05),
+      inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    opacity: 0; pointer-events: none;
+    transition: opacity .25s;
+  }
+  #suggest.show { opacity: 1; pointer-events: auto; }
+  #suggest li {
+    padding: 12px 18px; cursor: pointer; font-size: 15px; color: #1a1a2e;
+    border-radius: 16px;
+    opacity: 0; transform: translateY(-12px);
+    animation: peel .32s cubic-bezier(.2,.9,.3,1.1) forwards;
+    transition: background .18s;
+  }
+  #suggest li:hover { background: rgba(0, 122, 255, 0.10); }
+  #suggest li:active { background: rgba(0, 122, 255, 0.18); }
+  #suggest li.leaving {
+    animation: fold .2s ease forwards;
+  }
+
+  @keyframes peel {
+    from { opacity: 0; transform: translateY(-12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fold {
+    from { opacity: 1; transform: translateY(0); }
+    to   { opacity: 0; transform: translateY(12px); }
+  }
+
+  /* ---------- 右上角设置按钮 ---------- */
+  #settings {
+    position: fixed; top: 20px; right: 20px; z-index: 10;
+    width: 44px; height: 44px; border-radius: 50%;
+    border: none; cursor: pointer;
+    background: rgba(255, 255, 255, 0.6);
+    backdrop-filter: blur(12px) saturate(160%);
+    -webkit-backdrop-filter: blur(12px) saturate(160%);
+    box-shadow: 0 2px 10px rgba(0,0,0,.10),
+      inset 0 0 0 1px rgba(255,255,255,.6);
+    display: flex; align-items: center; justify-content: center;
+    color: #555; font-size: 20px;
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1), background .2s;
+  }
+  #settings:hover {
+    background: rgba(255, 255, 255, 0.85);
+    transform: rotate(90deg);
+  }
+  #settings:active { transform: rotate(90deg) scale(.92); }
+
+  /* ---------- 背景视频 ---------- */
+  #bg {
+    position: fixed; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; z-index: -2; display: none;
+  }
+  /* 视频上加一层轻遮罩，保证搜索框可读 */
+  #bg-mask {
+    position: fixed; inset: 0; z-index: -1; display: none;
+    background: rgba(255, 255, 255, 0.15);
+  }
+  body.has-bg #bg, body.has-bg #bg-mask { display: block; }
+
+  /* ---------- 设置面板 ---------- */
+  #overlay {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(0, 0, 0, 0.25);
+    opacity: 0; pointer-events: none; transition: opacity .3s;
+  }
+  #overlay.open { opacity: 1; pointer-events: auto; }
+
+  #panel {
+    position: fixed; top: 16px; right: 16px; bottom: 16px; z-index: 21;
+    width: 340px; max-width: 86%;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 28px;
+    overflow: hidden;
+    box-shadow: none;
+    transform: translateX(120%);
+    transition: transform .45s cubic-bezier(.2,.9,.25,1), box-shadow .45s;
+    padding: 26px; box-sizing: border-box;
+    display: flex; flex-direction: column;
+  }
+  #panel.open {
+    transform: translateX(0);
+    box-shadow: 0 16px 48px rgba(0,0,0,.18);
+  }
+  /* 液态边缘色散扭曲 */
+  #panel::before {
+    content: ''; position: absolute; inset: -8px; z-index: 0;
+    border-radius: inherit; pointer-events: none;
+    border: 2px solid rgba(255,255,255,0.5);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.18),
+                inset 0 0 30px rgba(255,255,255,0.08);
+    filter: url(#liquid-glass-filter);
+    opacity: 0.6;
+  }
+  /* 渐变描边高光 */
+  #panel::after {
+    content: ''; position: absolute; inset: 0; z-index: 2;
+    border-radius: inherit; pointer-events: none;
+    padding: 1.5px;
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    background: linear-gradient(135deg,
+      rgba(255,255,255,0) 0%, rgba(255,255,255,0.16) 33%,
+      rgba(255,255,255,0.4) 66%, rgba(255,255,255,0) 100%);
+  }
+  /* 面板内容浮在玻璃层之上 */
+  #panel > h2, #panel > .row { position: relative; z-index: 3; }
+  /* 顶部柔光 */
+  #panel .sheen {
+    position: absolute; inset: 0; z-index: 1; border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(ellipse 80% 35% at 50% 0%,
+      rgba(255,255,255,0.35) 0%, transparent 70%);
+  }
+
+  #panel h2 {
+    margin: 0 0 22px; font-size: 20px; color: #1a1a2e; font-weight: 700;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #panel .close {
+    border: none; background: none; cursor: pointer;
+    font-size: 22px; color: #888; line-height: 1;
+    width: 32px; height: 32px; border-radius: 50%;
+    transition: background .2s;
+  }
+  #panel .close:hover { background: rgba(0,0,0,.06); }
+
+  .row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 0; border-bottom: 1px solid rgba(0,0,0,.06);
+  }
+  .row .label { font-size: 15px; color: #333; }
+
+  /* 上传按钮 */
+  .btn-file {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 14px; border-radius: 12px; cursor: pointer;
+    background: #0078d4; color: #fff; font-size: 14px;
+    transition: background .2s, transform .15s;
+  }
+  .btn-file:hover { background: #106ebe; }
+  .btn-file:active { transform: scale(.96); }
+  .btn-text {
+    border: none; background: none; cursor: pointer;
+    color: #e81123; font-size: 13px; padding: 4px 8px; border-radius: 8px;
+    transition: background .2s;
+  }
+  .btn-text:hover { background: rgba(232,17,35,.08); }
+
+  /* 开关 */
+  .switch { position: relative; width: 46px; height: 26px; cursor: pointer; }
+  .switch input { display: none; }
+  .switch .track {
+    position: absolute; inset: 0; border-radius: 13px;
+    background: #ccc; transition: background .25s;
+  }
+  .switch .thumb {
+    position: absolute; top: 3px; left: 3px;
+    width: 20px; height: 20px; border-radius: 50%; background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+    transition: transform .25s;
+  }
+  .switch input:checked + .track { background: #0078d4; }
+  .switch input:checked + .track + .thumb { transform: translateX(20px); }
+
+  /* 关闭辉光 */
+  body.no-glow .glow, body.no-glow .white, body.no-glow .border { display: none; }
+
+  /* 关闭液体玻璃：全关 —— 去掉所有色散扭曲、描边高光、磨砂背景 */
+  body.no-glass form::before, body.no-glass form::after,
+  body.no-glass #panel::before, body.no-glass #panel::after,
+  body.no-glass #panel .sheen { display: none; }
+
+  body.no-glass form {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: #fff; border: 1px solid #e2e2e2;
+  }
+  body.no-glass #suggest {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: #fff;
+    box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 0 0 1px rgba(0,0,0,.06);
+  }
+  body.no-glass #panel {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: #fbfbfd; border: 1px solid #e2e2e2;
+  }
+  body.no-glass #settings {
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.12), inset 0 0 0 1px #e6e6e6;
+  }
+
+  /* 步进器（空闲时间）*/
+  .stepper {
+    display: inline-flex; align-items: center;
+    background: rgba(255,255,255,.55);
+    border: 1px solid rgba(0,0,0,.08);
+    border-radius: 13px; overflow: hidden;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,.04);
+  }
+  .step-btn {
+    border: none; background: none; cursor: pointer;
+    width: 34px; height: 32px; font-size: 18px; color: #0078d4;
+    display: flex; align-items: center; justify-content: center;
+    font-family: inherit; line-height: 1;
+    transition: background .15s, transform .1s;
+  }
+  .step-btn:hover { background: rgba(0,120,212,.1); }
+  .step-btn:active { background: rgba(0,120,212,.2); transform: scale(.9); }
+  .step-val {
+    min-width: 50px; text-align: center; font-size: 14px; color: #333;
+    font-variant-numeric: tabular-nums; user-select: none;
+    border-left: 1px solid rgba(0,0,0,.06);
+    border-right: 1px solid rgba(0,0,0,.06);
+    padding: 6px 0;
+  }
+  .step-val i { font-style: normal; color: #aaa; font-size: 12px; margin-left: 2px; }
+  #idle-secs {
+    outline: none; cursor: text; user-select: text;
+    min-width: 14px; display: inline-block; border-radius: 4px;
+    transition: background .15s;
+  }
+  #idle-secs:hover { background: rgba(0,120,212,.08); }
+  #idle-secs:focus { background: rgba(0,120,212,.14); }
+
+  /* 关于作者 */
+  .about-row { cursor: pointer; border-bottom: none; transition: opacity .2s; }
+  .about-row:hover { opacity: .7; }
+  .about-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 14px; color: #0078d4; font-weight: 500;
+  }
+  .about-link .arrow { font-size: 13px; }
+
+  /* 产品名称 */
+  .product-name-row { border-bottom: none; }
+  .product-name {
+    font-size: 13px; color: var(--text-2, #636366); font-weight: 500;
+  }
+
+  /* 动态背景控制 + 壁纸库 */
+  .bg-controls { display: inline-flex; align-items: center; gap: 10px; }
+  .bg-gallery-btn {
+    border: none; cursor: pointer; width: 32px; height: 32px;
+    border-radius: 10px; background: rgba(0,0,0,.05); font-size: 15px;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, transform .1s;
+  }
+  .bg-gallery-btn:hover { background: rgba(0,120,212,.12); }
+  .bg-gallery-btn:active { transform: scale(.92); }
+  .bg-gallery-btn.open { background: rgba(0,120,212,.18); }
+
+  .bg-drawer {
+    position: relative; z-index: 3;
+    max-height: 0; overflow: hidden;
+    transition: max-height .4s cubic-bezier(.2,.8,.2,1);
+  }
+  .wp-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;
+    padding: 12px 2px 6px;
+  }
+  .wp-tile {
+    position: relative; aspect-ratio: 16/10; border-radius: 12px;
+    overflow: hidden; cursor: pointer; background: #eaeaea;
+    box-shadow: inset 0 0 0 1px rgba(0,0,0,.08);
+    transition: transform .15s, box-shadow .2s;
+  }
+  .wp-tile:hover { transform: translateY(-2px); }
+  .wp-tile.active { box-shadow: 0 0 0 2px #0078d4, 0 4px 12px rgba(0,120,212,.3); }
+  .wp-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .wp-del {
+    position: absolute; top: 4px; right: 4px; z-index: 2;
+    width: 20px; height: 20px; border-radius: 50%; border: none; cursor: pointer;
+    background: rgba(0,0,0,.55); color: #fff; font-size: 11px; line-height: 1;
+    display: none; align-items: center; justify-content: center;
+  }
+  .wp-tile:hover .wp-del { display: flex; }
+  .wp-del:hover { background: #e81123; }
+  .wp-add {
+    display: flex; align-items: center; justify-content: center;
+    aspect-ratio: 16/10; border-radius: 12px; cursor: pointer;
+    border: 2px dashed rgba(0,120,212,.4); color: #0078d4; font-size: 26px;
+    transition: background .15s, border-color .2s;
+  }
+  .wp-add:hover { background: rgba(0,120,212,.08); border-color: #0078d4; }
+
+  /* 隐藏设置按钮：默认淡出，鼠标移到右上角再显现 */
+  body.hide-settings #settings {
+    opacity: 0; pointer-events: none; transform: translateY(-10px) scale(.9);
+    transition: opacity .3s, transform .3s;
+  }
+  body.hide-settings.peek-settings #settings {
+    opacity: 1; pointer-events: auto; transform: none;
+  }
+
+  /* 空闲时隐藏输入框 */
+  body.searchbox-hidden #wrap {
+    opacity: 0; transform: translateY(-12px) scale(.98); pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <!-- 液态玻璃 SVG 滤镜（移植自 屿你AI 个人主页 liquid-glass v3）-->
+  <svg aria-hidden="true" style="position:absolute;width:1px;height:1px;overflow:hidden;visibility:hidden;" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="glass-edge-mask" cx="50%" cy="50%" r="50%">
+        <stop offset="0%"   stop-color="black" stop-opacity="0" />
+        <stop offset="55%"  stop-color="black" stop-opacity="0" />
+        <stop offset="100%" stop-color="white" stop-opacity="1" />
+      </radialGradient>
+      <filter id="liquid-glass-filter" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.04 0.06" numOctaves="4" seed="2" result="NOISE" />
+        <feGaussianBlur in="NOISE" stdDeviation="1.5" result="NOISE_BLUR" />
+        <feDisplacementMap in="SourceGraphic" in2="NOISE_BLUR" scale="18" xChannelSelector="R" yChannelSelector="G" result="RED_DISPLACED" />
+        <feColorMatrix in="RED_DISPLACED" type="matrix" values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0" result="RED_CHANNEL" />
+        <feDisplacementMap in="SourceGraphic" in2="NOISE_BLUR" scale="14" xChannelSelector="G" yChannelSelector="B" result="GREEN_DISPLACED" />
+        <feColorMatrix in="GREEN_DISPLACED" type="matrix" values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 1 0" result="GREEN_CHANNEL" />
+        <feDisplacementMap in="SourceGraphic" in2="NOISE_BLUR" scale="10" xChannelSelector="B" yChannelSelector="R" result="BLUE_DISPLACED" />
+        <feColorMatrix in="BLUE_DISPLACED" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 1 0" result="BLUE_CHANNEL" />
+        <feBlend in="GREEN_CHANNEL" in2="BLUE_CHANNEL" mode="screen" result="GB_COMBINED" />
+        <feBlend in="RED_CHANNEL" in2="GB_COMBINED" mode="screen" result="RGB_COMBINED" />
+        <feGaussianBlur in="RGB_COMBINED" stdDeviation="0.4" result="ABERRATED" />
+        <feComposite in="ABERRATED" in2="glass-edge-mask" operator="in" result="EDGE_ONLY" />
+        <feMerge>
+          <feMergeNode in="SourceGraphic" />
+          <feMergeNode in="EDGE_ONLY" />
+        </feMerge>
+      </filter>
+    </defs>
+  </svg>
+
+  <video id="bg" autoplay muted loop playsinline></video>
+  <div id="bg-mask"></div>
+
+  <button id="settings" title="设置">⚙</button>
+
+  <div id="overlay"></div>
+  <aside id="panel">
+    <div class="sheen"></div>
+    <h2>设置<button class="close" id="panel-close" title="关闭">✕</button></h2>
+
+    <div class="row product-name-row">
+      <span class="label">产品名称</span>
+      <span class="product-name">YuNi-tab</span>
+    </div>
+
+    <div class="row">
+      <span class="label">动态背景</span>
+      <div class="bg-controls">
+        <button type="button" class="bg-gallery-btn" id="bg-gallery-btn" title="壁纸库">🖼</button>
+        <label class="switch">
+          <input type="checkbox" id="bg-toggle">
+          <span class="track"></span><span class="thumb"></span>
+        </label>
+      </div>
+    </div>
+    <div class="bg-drawer" id="bg-drawer">
+      <div class="wp-grid" id="wp-grid"></div>
+    </div>
+    <div class="row">
+      <span class="label">液体玻璃</span>
+      <label class="switch">
+        <input type="checkbox" id="glass-toggle" checked>
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+    </div>
+    <div class="row">
+      <span class="label">搜索框辉光</span>
+      <label class="switch">
+        <input type="checkbox" id="glow-toggle" checked>
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+    </div>
+    <div class="row">
+      <span class="label">隐藏设置按钮</span>
+      <label class="switch">
+        <input type="checkbox" id="hidebtn-toggle">
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+    </div>
+    <div class="row">
+      <span class="label">空闲隐藏输入框</span>
+      <label class="switch">
+        <input type="checkbox" id="idle-toggle">
+        <span class="track"></span><span class="thumb"></span>
+      </label>
+    </div>
+    <div class="row">
+      <span class="label">空闲时间</span>
+      <div class="stepper">
+        <button type="button" class="step-btn" id="idle-minus" title="减少">−</button>
+        <span class="step-val"><span id="idle-secs" contenteditable="true" inputmode="numeric" title="点击可输入">5</span><i>秒</i></span>
+        <button type="button" class="step-btn" id="idle-plus" title="增加">+</button>
+      </div>
+    </div>
+
+    <div class="row about-row" id="about">
+      <span class="label">关于作者</span>
+      <span class="about-link">Czy <span class="arrow">↗</span></span>
+    </div>
+
+    <input type="file" id="bg-input" accept="video/*" hidden>
+  </aside>
+
+  <div id="wrap">
+    <div class="field">
+      <div class="glow"></div>
+      <div class="white"></div>
+      <div class="border"></div>
+      <form id="s">
+        <input name="q" type="text" placeholder="在 Bing 上搜索" autocomplete="off" autofocus>
+        <button type="submit" title="搜索">🔍</button>
+      </form>
+    </div>
+    <div id="hint">请输入搜索内容</div>
+    <ul id="suggest"></ul>
+  </div>
+
+  <script src="newtab.js"></script>
+</body>
+</html>

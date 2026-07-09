@@ -1,0 +1,528 @@
+var form = document.getElementById('s');
+var input = form.q;
+var suggest = document.getElementById('suggest');
+
+// ---- 搜索建议 ----
+var timer;
+input.addEventListener('input', function () {
+  clearTimeout(timer);
+  var val = input.value.trim();
+  if (!val) { suggest.classList.remove('show'); return; }
+  timer = setTimeout(function () { fetchSuggest(val); }, 200);
+});
+
+function fetchSuggest(q) {
+  // 优先走后台 worker（扩展内可用）
+  if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+    chrome.runtime.sendMessage({ type: 'suggest', q: q }, function (res) {
+      if (!res || !res.ok || !res.data.length) {
+        suggest.classList.remove('show');
+        return;
+      }
+      render(res.data);
+    });
+    return;
+  }
+
+  // 回退：直接 fetch（file:// 或其他非扩展环境）
+  fetch('https://api.bing.com/osjson.aspx?query=' + encodeURIComponent(q))
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      var list = data[1] || [];
+      if (!list.length) { suggest.classList.remove('show'); return; }
+      render(list);
+    })
+    .catch(function () { suggest.classList.remove('show'); });
+}
+
+function render(list) {
+  var items = list.slice(0, 7);
+
+  function build() {
+    suggest.innerHTML = '';
+    items.forEach(function (text, i) {
+      var li = document.createElement('li');
+      li.textContent = text;
+      li.addEventListener('mousedown', function (e) {
+        e.preventDefault();
+        location.href = 'https://www.bing.com/search?q=' + encodeURIComponent(text);
+      });
+      suggest.appendChild(li);
+    });
+  }
+
+  var old = suggest.querySelectorAll('li');
+
+  if (suggest.classList.contains('show') && old.length) {
+    // 卡片已开着：旧内容下滑出去，再把新内容下滑进来（卡片不动）
+    old.forEach(function (li) { li.classList.add('leaving'); });
+    setTimeout(build, 160);
+  } else {
+    // 首次：卡片展开 + 内容浮现
+    build();
+    suggest.classList.add('show');
+  }
+}
+
+// 点空白处隐藏下拉
+document.addEventListener('click', function (e) {
+  if (!form.contains(e.target)) suggest.classList.remove('show');
+});
+
+// ---- 搜索提交 ----
+form.addEventListener('submit', function (e) {
+  e.preventDefault();
+  suggest.classList.remove('show');
+  var val = input.value.trim();
+  if (!val) {
+    // 确保输入框可见（不被空闲隐藏遮住），并重置空闲计时避免提示被吞掉
+    document.body.classList.remove('searchbox-hidden');
+    if (typeof resetIdle === 'function') resetIdle();
+    var h = document.getElementById('hint');
+    h.classList.add('show');
+    clearTimeout(h._t);
+    h._t = setTimeout(function () { h.classList.remove('show'); }, 1800);
+    input.focus();
+    return;
+  }
+  location.href = 'https://www.bing.com/search?q=' + encodeURIComponent(val);
+});
+
+// ==================== 设置面板 ====================
+var settingsBtn = document.getElementById('settings');
+var overlay = document.getElementById('overlay');
+var panel = document.getElementById('panel');
+var panelClose = document.getElementById('panel-close');
+
+function openPanel() { overlay.classList.add('open'); panel.classList.add('open'); }
+function closePanel() { overlay.classList.remove('open'); panel.classList.remove('open'); }
+
+settingsBtn.addEventListener('click', openPanel);
+panelClose.addEventListener('click', closePanel);
+overlay.addEventListener('click', closePanel);
+
+// ---- 关于作者 ----
+document.getElementById('about').addEventListener('click', function () {
+  window.open('https://czy001.pythonanywhere.com/', '_blank');
+});
+
+// ---- 辉光开关（记忆到 localStorage）----
+var glowToggle = document.getElementById('glow-toggle');
+if (localStorage.getItem('noGlow') === '1') {
+  document.body.classList.add('no-glow');
+  glowToggle.checked = false;
+}
+glowToggle.addEventListener('change', function () {
+  if (glowToggle.checked) {
+    document.body.classList.remove('no-glow');
+    localStorage.removeItem('noGlow');
+  } else {
+    document.body.classList.add('no-glow');
+    localStorage.setItem('noGlow', '1');
+  }
+});
+
+// ---- 液体玻璃开关 ----
+var glassToggle = document.getElementById('glass-toggle');
+if (localStorage.getItem('noGlass') === '1') {
+  document.body.classList.add('no-glass');
+  glassToggle.checked = false;
+}
+glassToggle.addEventListener('change', function () {
+  if (glassToggle.checked) {
+    document.body.classList.remove('no-glass');
+    localStorage.removeItem('noGlass');
+  } else {
+    document.body.classList.add('no-glass');
+    localStorage.setItem('noGlass', '1');
+  }
+});
+
+// ---- 隐藏设置按钮（鼠标移到右上角才显现）----
+var hideBtnToggle = document.getElementById('hidebtn-toggle');
+if (localStorage.getItem('hideSettings') === '1') {
+  document.body.classList.add('hide-settings');
+  hideBtnToggle.checked = true;
+}
+hideBtnToggle.addEventListener('change', function () {
+  if (hideBtnToggle.checked) {
+    document.body.classList.add('hide-settings');
+    localStorage.setItem('hideSettings', '1');
+  } else {
+    document.body.classList.remove('hide-settings', 'peek-settings');
+    localStorage.removeItem('hideSettings');
+  }
+});
+document.addEventListener('mousemove', function (e) {
+  if (!document.body.classList.contains('hide-settings')) return;
+  var near = e.clientX > window.innerWidth - 140 && e.clientY < 140;
+  document.body.classList.toggle('peek-settings', near);
+});
+
+// ---- 空闲隐藏输入框（可自定义时间）----
+var idleToggle = document.getElementById('idle-toggle');
+var idleSecsEl = document.getElementById('idle-secs');
+var idleMinus = document.getElementById('idle-minus');
+var idlePlus = document.getElementById('idle-plus');
+var idleTimer = null;
+var idleSecs = parseInt(localStorage.getItem('idleSecs'), 10) || 5;
+idleSecsEl.textContent = idleSecs;
+
+function setSecs(v) {
+  idleSecs = Math.min(600, Math.max(1, v || 5));
+  idleSecsEl.textContent = idleSecs;
+  localStorage.setItem('idleSecs', idleSecs);
+  if (idleToggle.checked) resetIdle();
+}
+idleMinus.addEventListener('click', function () {
+  setSecs(idleSecs - (idleSecs > 10 ? 5 : 1));
+});
+idlePlus.addEventListener('click', function () {
+  setSecs(idleSecs + (idleSecs >= 10 ? 5 : 1));
+});
+
+// 直接点数字输入
+idleSecsEl.addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); idleSecsEl.blur(); return; }
+  var ok = /[0-9]/.test(e.key) ||
+    ['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].indexOf(e.key) !== -1;
+  if (!ok) e.preventDefault();
+});
+idleSecsEl.addEventListener('focus', function () {
+  var r = document.createRange();
+  r.selectNodeContents(idleSecsEl);
+  var sel = window.getSelection();
+  sel.removeAllRanges(); sel.addRange(r);
+});
+idleSecsEl.addEventListener('blur', function () {
+  setSecs(parseInt(idleSecsEl.textContent, 10));
+});
+
+function showSearch() {
+  document.body.classList.remove('searchbox-hidden');
+}
+function resetIdle() {
+  showSearch();
+  clearTimeout(idleTimer);
+  if (!idleToggle.checked) return;
+  idleTimer = setTimeout(function () {
+    // 输入框有内容或聚焦时不隐藏
+    if (document.activeElement === input || input.value.trim()) { resetIdle(); return; }
+    document.body.classList.add('searchbox-hidden');
+    suggest.classList.remove('show');
+  }, idleSecs * 1000);
+}
+function startIdle() {
+  ['mousemove', 'keydown', 'click', 'wheel', 'touchstart'].forEach(function (ev) {
+    document.addEventListener(ev, resetIdle, { passive: true });
+  });
+  resetIdle();
+}
+function stopIdle() {
+  clearTimeout(idleTimer);
+  showSearch();
+}
+
+if (localStorage.getItem('idleHide') === '1') {
+  idleToggle.checked = true;
+  startIdle();
+}
+idleToggle.addEventListener('change', function () {
+  if (idleToggle.checked) {
+    localStorage.setItem('idleHide', '1');
+    startIdle();
+  } else {
+    localStorage.removeItem('idleHide');
+    stopIdle();
+  }
+});
+
+// ==================== 动态视频背景 + 壁纸库 ====================
+var bg = document.getElementById('bg');
+var bgInput = document.getElementById('bg-input');
+var bgToggle = document.getElementById('bg-toggle');
+var galleryBtn = document.getElementById('bg-gallery-btn');
+var drawer = document.getElementById('bg-drawer');
+var wpGrid = document.getElementById('wp-grid');
+var DB_NAME = 'yuniBg', STORE = 'wallpapers';
+var currentUrl = null;
+var tileUrls = [];
+
+function openDB() {
+  return new Promise(function (resolve, reject) {
+    var req = indexedDB.open(DB_NAME, 2);
+    req.onupgradeneeded = function () {
+      var db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
+      }
+      // 迁移旧的单个视频
+      if (db.objectStoreNames.contains('files')) {
+        try {
+          var old = req.transaction.objectStore('files').get('video');
+          old.onsuccess = function () {
+            var blob = old.result;
+            if (blob) {
+              req.transaction.objectStore(STORE).add({
+                name: '旧壁纸', size: blob.size || 0, lastModified: 0, blob: blob
+              });
+            }
+          };
+        } catch (e) {}
+      }
+    };
+    req.onsuccess = function () { resolve(req.result); };
+    req.onerror = function () { reject(req.error); };
+  });
+}
+
+function store(mode) {
+  return openDB().then(function (db) {
+    return db.transaction(STORE, mode).objectStore(STORE);
+  });
+}
+
+function listWallpapers() {
+  return store('readonly').then(function (s) {
+    return new Promise(function (resolve, reject) {
+      var req = s.getAll();
+      req.onsuccess = function () { resolve(req.result || []); };
+      req.onerror = function () { reject(req.error); };
+    });
+  });
+}
+
+function addWallpaper(file) {
+  return listWallpapers().then(function (list) {
+    var dup = list.filter(function (w) {
+      return w.name === file.name && w.size === file.size;
+    })[0];
+    if (dup) return dup.id; // 同名同大小视为同一张，不重复添加
+    return store('readwrite').then(function (s) {
+      return new Promise(function (resolve, reject) {
+        var req = s.add({ name: file.name, size: file.size, lastModified: file.lastModified, blob: file });
+        req.onsuccess = function () { resolve(req.result); };
+        req.onerror = function () { reject(req.error); };
+      });
+    });
+  });
+}
+
+function getWallpaper(id) {
+  return store('readonly').then(function (s) {
+    return new Promise(function (resolve, reject) {
+      var req = s.get(id);
+      req.onsuccess = function () { resolve(req.result || null); };
+      req.onerror = function () { reject(req.error); };
+    });
+  });
+}
+
+function deleteWallpaper(id) {
+  return store('readwrite').then(function (s) {
+    return new Promise(function (resolve) { s.delete(id).onsuccess = resolve; });
+  });
+}
+
+function getActiveId() { return parseInt(localStorage.getItem('activeWp'), 10) || null; }
+function setActiveId(id) {
+  if (id == null) localStorage.removeItem('activeWp');
+  else localStorage.setItem('activeWp', id);
+}
+
+function applyBlob(blob) {
+  if (currentUrl) URL.revokeObjectURL(currentUrl);
+  currentUrl = URL.createObjectURL(blob);
+  bg.src = currentUrl;
+  document.body.classList.add('has-bg');
+  bg.play().catch(function () {});
+}
+
+function applyWallpaper(id) {
+  return getWallpaper(id).then(function (w) {
+    if (!w) return;
+    applyBlob(w.blob);
+    setActiveId(id);
+    bgToggle.checked = true;
+    renderGallery();
+  });
+}
+
+function hideBackground() {
+  bg.pause(); bg.removeAttribute('src'); bg.load();
+  if (currentUrl) { URL.revokeObjectURL(currentUrl); currentUrl = null; }
+  document.body.classList.remove('has-bg');
+}
+
+// ---- 壁纸库抽屉（用测得的真实高度做动画，收放都跟手）----
+var drawerCloseTimer = null;
+
+function openDrawer() {
+  clearTimeout(drawerCloseTimer);
+  drawer.classList.add('open');
+  galleryBtn.classList.add('open');
+  renderGallery(); // 渲染后在内部把 max-height 设为真实内容高度
+}
+
+function closeDrawer() {
+  clearTimeout(drawerCloseTimer);
+  drawer.classList.remove('open');
+  galleryBtn.classList.remove('open');
+  // 先固定当前高度作为动画起点，下一帧再收到 0，才能平滑收起
+  drawer.style.maxHeight = drawer.scrollHeight + 'px';
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () { drawer.style.maxHeight = '0px'; });
+  });
+  drawerCloseTimer = setTimeout(function () {
+    clearTiles();
+    drawer.style.maxHeight = '';
+  }, 450);
+}
+
+galleryBtn.addEventListener('click', function () {
+  if (drawer.classList.contains('open')) closeDrawer();
+  else openDrawer();
+});
+
+function clearTiles() {
+  tileUrls.forEach(function (u) { URL.revokeObjectURL(u); });
+  tileUrls = [];
+  wpGrid.innerHTML = '';
+}
+
+// 抓取视频封面（首帧附近）生成静态图
+function makePoster(blob) {
+  return new Promise(function (resolve, reject) {
+    var v = document.createElement('video');
+    v.muted = true; v.preload = 'auto'; v.playsInline = true;
+    var url = URL.createObjectURL(blob);
+    v.src = url;
+    var done = false;
+    function fail() { if (!done) { done = true; URL.revokeObjectURL(url); reject(new Error('poster fail')); } }
+    function grab() {
+      if (done) return; done = true;
+      try {
+        var w = v.videoWidth || 320, h = v.videoHeight || 200;
+        var scale = Math.min(1, 400 / w);
+        var c = document.createElement('canvas');
+        c.width = Math.round(w * scale); c.height = Math.round(h * scale);
+        c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+        c.toBlob(function (b) {
+          URL.revokeObjectURL(url);
+          b ? resolve(b) : reject(new Error('toBlob null'));
+        }, 'image/jpeg', 0.82);
+      } catch (e) { URL.revokeObjectURL(url); reject(e); }
+    }
+    v.addEventListener('loadeddata', function () {
+      var t = Math.min(1, (isFinite(v.duration) ? v.duration : 2) * 0.1);
+      try { v.currentTime = t; } catch (e) { grab(); }
+    });
+    v.addEventListener('seeked', grab);
+    v.addEventListener('error', fail);
+    setTimeout(fail, 8000); // 兜底超时
+  });
+}
+
+// 把封面写回库，下次直接用
+function persistPoster(id, posterBlob) {
+  return getWallpaper(id).then(function (w) {
+    if (!w) return;
+    w.poster = posterBlob;
+    return store('readwrite').then(function (s) { s.put(w); });
+  });
+}
+
+function renderGallery() {
+  if (!drawer.classList.contains('open')) return;
+  listWallpapers().then(function (list) {
+    var active = getActiveId();
+    clearTiles();
+    list.forEach(function (w) {
+      var tile = document.createElement('div');
+      tile.className = 'wp-tile' + (w.id === active ? ' active' : '');
+      var img = document.createElement('img');
+      tile.appendChild(img);
+      if (w.poster) {
+        var pu = URL.createObjectURL(w.poster); tileUrls.push(pu); img.src = pu;
+      } else {
+        // 没有封面 → 抓取视频首帧，生成后缓存回库
+        makePoster(w.blob).then(function (pb) {
+          var pu = URL.createObjectURL(pb); tileUrls.push(pu); img.src = pu;
+          persistPoster(w.id, pb);
+        }).catch(function () {});
+      }
+      var del = document.createElement('button');
+      del.className = 'wp-del'; del.textContent = '✕'; del.title = '删除';
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        deleteWallpaper(w.id).then(function () {
+          if (w.id === active) {
+            // 删的是正在用的 → 还有别的就切过去，一张都没了才关闭
+            listWallpapers().then(function (rest) {
+              if (rest.length) {
+                applyWallpaper(rest[0].id);
+              } else {
+                setActiveId(null); hideBackground(); bgToggle.checked = false;
+                renderGallery();
+              }
+            });
+          } else {
+            renderGallery();
+          }
+        });
+      });
+      tile.appendChild(del);
+      tile.addEventListener('click', function () { applyWallpaper(w.id); });
+      wpGrid.appendChild(tile);
+    });
+    // + 上传瓦片
+    var add = document.createElement('div');
+    add.className = 'wp-add'; add.textContent = '+'; add.title = '上传新壁纸';
+    add.addEventListener('click', function () { bgInput.value = ''; bgInput.click(); });
+    wpGrid.appendChild(add);
+
+    // 撑开到真实内容高度（瓦片用固定宽高比，图片未加载也不影响高度）
+    if (drawer.classList.contains('open')) {
+      drawer.style.maxHeight = drawer.scrollHeight + 'px';
+    }
+  });
+}
+
+// ---- 上传 ----
+bgInput.addEventListener('change', function () {
+  var file = bgInput.files[0];
+  if (!file) return;
+  addWallpaper(file).then(function (id) { applyWallpaper(id); });
+});
+
+// ---- 开关：库为空强制上传；有库则直接应用 ----
+bgToggle.addEventListener('change', function () {
+  if (bgToggle.checked) {
+    listWallpapers().then(function (list) {
+      if (!list.length) {
+        bgInput.value = ''; bgInput.click();
+        setTimeout(function () {
+          if (!document.body.classList.contains('has-bg')) bgToggle.checked = false;
+        }, 800);
+      } else {
+        var id = getActiveId();
+        if (!id || !list.some(function (w) { return w.id === id; })) id = list[0].id;
+        applyWallpaper(id);
+      }
+    });
+  } else {
+    hideBackground();
+  }
+});
+
+bgInput.addEventListener('cancel', function () {
+  if (!document.body.classList.contains('has-bg')) bgToggle.checked = false;
+});
+
+// ---- 启动恢复上次背景 ----
+listWallpapers().then(function (list) {
+  if (!list.length) return;
+  var id = getActiveId();
+  if (id && list.some(function (w) { return w.id === id; })) applyWallpaper(id);
+});
+
