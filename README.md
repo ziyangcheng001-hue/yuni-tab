@@ -19,10 +19,10 @@ A liquid-glass browser startpage with dynamic video wallpapers, rotating glow bo
 
 ## 安装 Install
 
-1. 下载 `YuNi-tab_v1.0.zip` 并解压
+1. 下载 `YuNi-tab_v1.0.zip` 
 2. 打开 Edge/Chrome，进入 `edge://extensions` 或 `chrome://extensions`
 3. 开启右上角「开发人员模式 / Developer mode」
-4. 点击「加载解压缩的扩展 / Load unpacked」，选择解压后的文件夹
+4. 点击「加载解压缩的扩展 / Load unpacked」，选择。
 
 ## 文件结构 Files
 
