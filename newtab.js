@@ -355,27 +355,30 @@ function hideBackground() {
 }
 
 // ---- 壁纸库抽屉（用测得的真实高度做动画，收放都跟手）----
+var DRAWER_MAX = 320;
 var drawerCloseTimer = null;
 
 function openDrawer() {
   clearTimeout(drawerCloseTimer);
   drawer.classList.add('open');
   galleryBtn.classList.add('open');
-  renderGallery(); // 渲染后在内部把 max-height 设为真实内容高度
+  renderGallery(); // 渲染后在内部把 max-height 设为真实内容高度（不超过 320px）
 }
 
 function closeDrawer() {
   clearTimeout(drawerCloseTimer);
-  drawer.classList.remove('open');
-  galleryBtn.classList.remove('open');
   // 先固定当前高度作为动画起点，下一帧再收到 0，才能平滑收起
-  drawer.style.maxHeight = drawer.scrollHeight + 'px';
+  drawer.style.maxHeight = Math.min(drawer.scrollHeight, DRAWER_MAX) + 'px';
   requestAnimationFrame(function () {
-    requestAnimationFrame(function () { drawer.style.maxHeight = '0px'; });
+    drawer.style.maxHeight = '0px';
   });
+  drawer.style.overflow = 'hidden'; // 收起时不显示滚动条
   drawerCloseTimer = setTimeout(function () {
     clearTiles();
     drawer.style.maxHeight = '';
+    drawer.style.overflow = '';
+    drawer.classList.remove('open');
+    galleryBtn.classList.remove('open');
   }, 450);
 }
 
@@ -481,9 +484,9 @@ function renderGallery() {
     add.addEventListener('click', function () { bgInput.value = ''; bgInput.click(); });
     wpGrid.appendChild(add);
 
-    // 撑开到真实内容高度（瓦片用固定宽高比，图片未加载也不影响高度）
+    // 撑开到真实内容高度（不超过 320px，超出可滚动）
     if (drawer.classList.contains('open')) {
-      drawer.style.maxHeight = drawer.scrollHeight + 'px';
+      drawer.style.maxHeight = Math.min(drawer.scrollHeight, DRAWER_MAX) + 'px';
     }
   });
 }
@@ -525,4 +528,327 @@ listWallpapers().then(function (list) {
   var id = getActiveId();
   if (id && list.some(function (w) { return w.id === id; })) applyWallpaper(id);
 });
+
+// ==================== 收藏夹 Dock ====================
+var bmDock = document.getElementById('bm-dock');
+
+// ---- 自定义书签（localStorage 持久化）----
+function getCustomBMs() {
+  try { return JSON.parse(localStorage.getItem('customBMs') || '[]'); }
+  catch (e) { return []; }
+}
+function saveCustomBMs(list) {
+  localStorage.setItem('customBMs', JSON.stringify(list));
+}
+
+// ---- 图标：扩展环境走 chrome://favicon，否则用首字母 ----
+function faviconURL(url) {
+  if (typeof chrome !== 'undefined' && chrome.runtime) {
+    var a = document.createElement('a');
+    a.href = url;
+    var host = a.hostname;
+    if (!host) return null;
+    // Chrome/Edge: chrome://favicon; Firefox: Google favicon proxy
+    if (typeof chrome.bookmarks !== "undefined" && chrome.bookmarks.getTree) {
+      return "chrome://favicon/size/16@2x/" + a.protocol + "//" + host + "/";
+    }
+    return "https://www.google.com/s2/favicons?domain=" + host + "&sz=32";
+  }
+  return null;
+}
+
+function makePlaceholderEl(title) {
+  var ph = document.createElement('span');
+  ph.className = 'bm-icon placeholder';
+  ph.textContent = (title || '?').charAt(0).toUpperCase();
+  return ph;
+}
+
+// ---- 渲染 Dock ----
+function renderDock(bookmarks) {
+  bmDock.innerHTML = '';
+
+  // 合并自定义书签（放到最后）
+  var custom = getCustomBMs();
+  var all = (bookmarks || []).concat(custom);
+
+  all.forEach(function (bm) {
+    var item = document.createElement('div');
+    item.className = 'bm-item';
+    item.title = bm.title + '\n' + bm.url;
+    item.setAttribute('data-id', bm._id || '');
+
+    // 图标
+    if (bm._icon) {
+      // 自定义图标（base64）
+      var img = document.createElement('img');
+      img.className = 'bm-icon';
+      img.src = bm._icon;
+      item.appendChild(img);
+    } else {
+      var icon = document.createElement('img');
+      icon.className = 'bm-icon';
+      var fv = faviconURL(bm.url);
+      if (fv) {
+        icon.src = fv;
+        icon.onerror = function () {
+          icon.style.display = 'none';
+          item.insertBefore(makePlaceholderEl(bm.title), item.firstChild);
+        };
+      } else {
+        icon.style.display = 'none';
+        item.appendChild(makePlaceholderEl(bm.title));
+      }
+      item.appendChild(icon);
+    }
+
+    // 名称
+    var name = document.createElement('span');
+    name.className = 'bm-name';
+    name.textContent = bm.title;
+    item.appendChild(name);
+
+    // 删除按钮（仅自定义书签有）
+    if (bm._id) {
+      var del = document.createElement('button');
+      del.className = 'bm-del';
+      del.textContent = '✕';
+      del.title = '删除';
+      del.addEventListener('click', function (e) {
+        e.stopPropagation();
+        removeCustomBM(bm._id);
+      });
+      item.appendChild(del);
+    }
+
+    item.addEventListener('click', function () {
+      window.open(bm.url, '_self');
+    });
+
+    bmDock.appendChild(item);
+  });
+
+  // + 添加按钮
+  var add = document.createElement('div');
+  add.className = 'bm-add';
+  add.textContent = '+';
+  add.title = '添加书签';
+  add.addEventListener('click', function (e) {
+    e.stopPropagation();
+    openBmForm();
+  });
+  bmDock.appendChild(add);
+
+  // 无自定义书签时 + 始终可见
+  document.body.classList.toggle('no-custom-bm', custom.length === 0);
+}
+
+// ---- 自定义书签 CRUD ----
+function removeCustomBM(id) {
+  var list = getCustomBMs().filter(function (b) { return b._id !== id; });
+  saveCustomBMs(list);
+  loadBookmarks();
+}
+
+// ---- 添加表单 ----
+var bmFormWrap = document.getElementById('bm-form-wrap');
+var bmForm = document.getElementById('bm-form');
+var bmNameEl = document.getElementById('bm-name');
+var bmUrlEl = document.getElementById('bm-url');
+var bmSaveBtn = document.getElementById('bm-save');
+var bmIconPick = document.getElementById('bm-icon-pick');
+var bmIconInput = document.getElementById('bm-icon-input');
+var bmIconData = null;
+
+var bmHint = document.getElementById('bm-hint');
+
+function openBmForm() {
+  bmFormWrap.classList.add('open');
+  bmNameEl.value = '';
+  bmUrlEl.value = '';
+  bmIconData = null;
+  bmIconPick.innerHTML = '🖼';
+  bmSaveBtn.disabled = true;
+  bmHint.classList.remove('show');
+  bmNameEl.focus();
+}
+
+function closeBmForm() {
+  if (!bmFormWrap.classList.contains('open')) return;
+  bmForm.classList.add('closing');
+  bmForm.addEventListener('animationend', function onEnd() {
+    bmForm.removeEventListener('animationend', onEnd);
+    bmForm.classList.remove('closing');
+    bmFormWrap.classList.remove('open');
+  });
+}
+
+bmForm.addEventListener('submit', function (e) {
+  e.preventDefault();
+  var title = bmNameEl.value.trim();
+  var url = bmUrlEl.value.trim();
+  if (!title && !url) {
+    bmHint.textContent = '请填写名称和网址';
+    bmHint.classList.add('show');
+    return;
+  }
+  if (!title) {
+    bmHint.textContent = '请填写名称';
+    bmHint.classList.add('show');
+    return;
+  }
+  if (!url) {
+    bmHint.textContent = '请填写网址';
+    bmHint.classList.add('show');
+    return;
+  }
+  bmHint.classList.remove('show');
+  // 自动补 https://
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+  var list = getCustomBMs();
+  list.push({
+    _id: 'c' + Date.now(),
+    title: title,
+    url: url,
+    _icon: bmIconData || null
+  });
+  saveCustomBMs(list);
+  closeBmForm();
+  loadBookmarks();
+});
+
+document.getElementById('bm-cancel').addEventListener('click', closeBmForm);
+
+// 输入校验
+function checkBmForm() {
+  bmSaveBtn.disabled = !bmNameEl.value.trim() || !bmUrlEl.value.trim();
+}
+bmNameEl.addEventListener('input', checkBmForm);
+bmUrlEl.addEventListener('input', checkBmForm);
+
+// 图标上传
+bmIconPick.addEventListener('click', function () { bmIconInput.value = ''; bmIconInput.click(); });
+bmIconInput.addEventListener('change', function () {
+  var file = bmIconInput.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    bmIconData = reader.result;
+    bmIconPick.innerHTML = '<img src="' + bmIconData + '" alt="">';
+  };
+  reader.readAsDataURL(file);
+});
+
+// 点击外部关闭表单
+document.addEventListener('click', function (e) {
+  if (bmFormWrap.classList.contains('open') &&
+      !bmFormWrap.contains(e.target) &&
+      e.target.className !== 'bm-add') {
+    closeBmForm();
+  }
+});
+
+// ---- 加载书签 ----
+function loadBookmarks() {
+  if (typeof chrome === 'undefined' || !chrome.bookmarks) {
+    renderDock([]);
+    return;
+  }
+
+  chrome.bookmarks.getTree().then(function (tree) {
+    // 找"书签栏 / Bookmarks Bar"节点
+    var bar = null;
+    function walk(nodes) {
+      for (var i = 0; i < nodes.length; i++) {
+        var n = nodes[i];
+        if (n.title === '书签栏' || n.title === 'Bookmarks Bar' ||
+            n.title === 'Bookmarks bar' || n.title === 'bookmarks bar') {
+          bar = n;
+          return;
+        }
+        if (n.children) walk(n.children);
+      }
+    }
+    walk(tree);
+
+    function flatten(nodes) {
+      var all = [];
+      for (var j = 0; j < nodes.length; j++) {
+        var c = nodes[j];
+        if (c.url) all.push(c);
+        if (c.children) all = all.concat(flatten(c.children));
+      }
+      return all;
+    }
+
+    var bookmarks = [];
+    if (bar && bar.children) {
+      bookmarks = flatten(bar.children);
+    } else {
+      var root = tree[0];
+      if (root && root.children) bookmarks = flatten(root.children);
+    }
+
+    renderDock(bookmarks.slice(0, 30));
+  }).catch(function (err) {
+    console.error('[Dock] Failed to load bookmarks:', err);
+    renderDock([]);
+  });
+}
+
+// ---- Dock 总开关 ----
+var dockToggle = document.getElementById('dock-toggle');
+if (localStorage.getItem('noDock') === '1') {
+  document.body.classList.add('no-bmdock');
+  dockToggle.checked = false;
+}
+dockToggle.addEventListener('change', function () {
+  if (dockToggle.checked) {
+    document.body.classList.remove('no-bmdock');
+    localStorage.removeItem('noDock');
+  } else {
+    document.body.classList.add('no-bmdock');
+    localStorage.setItem('noDock', '1');
+  }
+});
+
+// ---- Dock 空闲隐藏开关（跟随搜索框空闲计时）----
+var dockIdleToggle = document.getElementById('dock-idle-toggle');
+if (localStorage.getItem('dockIdle') === '1') {
+  document.body.classList.add('dock-idle');
+  dockIdleToggle.checked = true;
+}
+dockIdleToggle.addEventListener('change', function () {
+  if (dockIdleToggle.checked) {
+    document.body.classList.add('dock-idle');
+    localStorage.setItem('dockIdle', '1');
+  } else {
+    document.body.classList.remove('dock-idle');
+    localStorage.removeItem('dockIdle');
+  }
+});
+
+// ---- 管理 Dock（编辑模式）----
+var manageDockToggle = document.getElementById('manage-dock-toggle');
+
+function enterEditMode() {
+  document.body.classList.add('bm-edit');
+  manageDockToggle.checked = true;
+}
+function exitEditMode() {
+  document.body.classList.remove('bm-edit');
+  manageDockToggle.checked = false;
+}
+
+manageDockToggle.addEventListener('change', function () {
+  if (manageDockToggle.checked) {
+    enterEditMode();
+  } else {
+    exitEditMode();
+  }
+});
+
+// 启动加载
+loadBookmarks();
 
