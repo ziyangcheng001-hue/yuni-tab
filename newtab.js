@@ -48,7 +48,7 @@ function fetchSuggest(q) {
       suggest.classList.remove('show');
       return;
     }
-    render(data);
+    render(data, requestId);
   }
 
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
@@ -74,10 +74,11 @@ function fetchSuggest(q) {
     .catch(function () { accept([]); });
 }
 
-function render(list) {
+function render(list, requestId) {
   var items = list.slice(0, 7);
 
   function build() {
+    if (requestId !== suggestRequestId) return;
     suggest.innerHTML = '';
     items.forEach(function (text, i) {
       var li = document.createElement('li');

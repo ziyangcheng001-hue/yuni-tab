@@ -29,3 +29,9 @@ test('routes submitted searches and suggestion clicks through the provider modul
   assert.equal(providerRoutes.length, 2);
   assert.doesNotMatch(script, /location\.href = 'https:\/\/www\.bing\.com\/search\?q='/);
 });
+
+test('guards delayed suggestion rendering with the active request id', () => {
+  assert.match(script, /render\(data, requestId\)/);
+  assert.match(script, /function render\(list, requestId\)/);
+  assert.match(script, /function build\(\) \{\s*if \(requestId !== suggestRequestId\) return;/);
+});
