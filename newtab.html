@@ -283,6 +283,24 @@
   }
   .row .label { font-size: 15px; color: #333; }
 
+  .engine-picker {
+    display: inline-grid; grid-template-columns: repeat(2, minmax(58px, 1fr));
+    padding: 3px; border: 1px solid rgba(0,0,0,.08); border-radius: 8px;
+    background: rgba(255,255,255,.55);
+  }
+  .engine-option {
+    min-width: 58px; height: 30px; padding: 0 10px;
+    border: none; border-radius: 6px; background: transparent;
+    color: #555; font: 500 13px/1 inherit; cursor: pointer;
+    transition: background .2s, color .2s, box-shadow .2s;
+  }
+  .engine-option:hover { background: rgba(0,0,0,.05); transform: none; }
+  .engine-option.active {
+    background: #fff; color: #0078d4;
+    box-shadow: 0 1px 4px rgba(0,0,0,.12);
+  }
+  .engine-option:focus-visible { outline: 2px solid #0078d4; outline-offset: 1px; }
+
   /* 上传按钮 */
   .btn-file {
     display: inline-flex; align-items: center; gap: 6px;
@@ -685,6 +703,14 @@
     </div>
 
     <div class="row">
+      <span class="label">搜索引擎</span>
+      <div class="engine-picker" role="group" aria-label="搜索引擎">
+        <button type="button" class="engine-option" data-search-engine="bing" aria-pressed="false">Bing</button>
+        <button type="button" class="engine-option" data-search-engine="google" aria-pressed="false">Google</button>
+      </div>
+    </div>
+
+    <div class="row">
       <span class="label">动态背景</span>
       <div class="bg-controls">
         <button type="button" class="bg-gallery-btn" id="bg-gallery-btn" title="壁纸库">🖼</button>
@@ -797,6 +823,7 @@
   </div>
   <input type="file" id="bm-icon-input" accept="image/*" hidden>
 
+  <script src="search-engines.js"></script>
   <script src="newtab.js"></script>
 </body>
 </html>

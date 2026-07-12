@@ -1,6 +1,32 @@
 var form = document.getElementById('s');
 var input = form.q;
 var suggest = document.getElementById('suggest');
+var engineOptions = document.querySelectorAll('[data-search-engine]');
+var activeEngine = SearchEngines.normalizeEngine(localStorage.getItem('searchEngine'));
+var suggestRequestId = 0;
+
+function setSearchEngine(engine, persist) {
+  activeEngine = SearchEngines.normalizeEngine(engine);
+  input.placeholder = SearchEngines.getProvider(activeEngine).placeholder;
+  suggestRequestId += 1;
+  suggest.classList.remove('show');
+
+  engineOptions.forEach(function (option) {
+    var selected = option.dataset.searchEngine === activeEngine;
+    option.classList.toggle('active', selected);
+    option.setAttribute('aria-pressed', selected ? 'true' : 'false');
+  });
+
+  if (persist) localStorage.setItem('searchEngine', activeEngine);
+}
+
+engineOptions.forEach(function (option) {
+  option.addEventListener('click', function () {
+    setSearchEngine(option.dataset.searchEngine, true);
+  });
+});
+
+setSearchEngine(activeEngine, false);
 
 // ---- 搜索建议 ----
 var timer;
@@ -12,27 +38,40 @@ input.addEventListener('input', function () {
 });
 
 function fetchSuggest(q) {
-  // 优先走后台 worker（扩展内可用）
+  var requestEngine = activeEngine;
+  var requestId = ++suggestRequestId;
+
+  function accept(data) {
+    if (requestId !== suggestRequestId) return;
+    if (requestEngine !== activeEngine || input.value.trim() !== q) return;
+    if (!data.length) {
+      suggest.classList.remove('show');
+      return;
+    }
+    render(data);
+  }
+
   if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
-    chrome.runtime.sendMessage({ type: 'suggest', q: q }, function (res) {
-      if (!res || !res.ok || !res.data.length) {
-        suggest.classList.remove('show');
-        return;
+    chrome.runtime.sendMessage(
+      { type: 'suggest', engine: requestEngine, q: q },
+      function (res) {
+        if (!res || !res.ok || !Array.isArray(res.data)) {
+          accept([]);
+          return;
+        }
+        accept(res.data);
       }
-      render(res.data);
-    });
+    );
     return;
   }
 
-  // 回退：直接 fetch（file:// 或其他非扩展环境）
-  fetch('https://api.bing.com/osjson.aspx?query=' + encodeURIComponent(q))
-    .then(function (r) { return r.json(); })
-    .then(function (data) {
-      var list = data[1] || [];
-      if (!list.length) { suggest.classList.remove('show'); return; }
-      render(list);
+  fetch(SearchEngines.buildSuggestUrl(requestEngine, q))
+    .then(function (response) {
+      if (!response.ok) throw new Error('Autocomplete request failed');
+      return response.json();
     })
-    .catch(function () { suggest.classList.remove('show'); });
+    .then(function (payload) { accept(SearchEngines.parseSuggestions(payload)); })
+    .catch(function () { accept([]); });
 }
 
 function render(list) {
@@ -45,7 +84,7 @@ function render(list) {
       li.textContent = text;
       li.addEventListener('mousedown', function (e) {
         e.preventDefault();
-        location.href = 'https://www.bing.com/search?q=' + encodeURIComponent(text);
+        location.href = SearchEngines.buildSearchUrl(activeEngine, text);
       });
       suggest.appendChild(li);
     });
@@ -85,7 +124,7 @@ form.addEventListener('submit', function (e) {
     input.focus();
     return;
   }
-  location.href = 'https://www.bing.com/search?q=' + encodeURIComponent(val);
+  location.href = SearchEngines.buildSearchUrl(activeEngine, val);
 });
 
 // ==================== 设置面板 ====================
