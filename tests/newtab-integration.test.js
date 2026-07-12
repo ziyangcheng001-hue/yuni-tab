@@ -35,3 +35,10 @@ test('guards delayed suggestion rendering with the active request id', () => {
   assert.match(script, /function render\(list, requestId\)/);
   assert.match(script, /function build\(\) \{\s*if \(requestId !== suggestRequestId\) return;/);
 });
+
+test('invalidates pending suggestions as soon as the input changes', () => {
+  assert.match(
+    script,
+    /input\.addEventListener\('input', function \(\) \{\s*suggestRequestId \+= 1;/
+  );
+});

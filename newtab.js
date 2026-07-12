@@ -31,6 +31,7 @@ setSearchEngine(activeEngine, false);
 // ---- 搜索建议 ----
 var timer;
 input.addEventListener('input', function () {
+  suggestRequestId += 1;
   clearTimeout(timer);
   var val = input.value.trim();
   if (!val) { suggest.classList.remove('show'); return; }
