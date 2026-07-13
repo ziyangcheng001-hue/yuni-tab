@@ -42,3 +42,19 @@ test('invalidates pending suggestions as soon as the input changes', () => {
     /input\.addEventListener\('input', function \(\) \{\s*suggestRequestId \+= 1;/
   );
 });
+
+test('uses a vector search icon instead of an emoji', () => {
+  assert.match(
+    html,
+    /<button type="submit" title="搜索" aria-label="搜索">\s*<svg class="search-icon"/
+  );
+  assert.doesNotMatch(html, /<button type="submit" title="搜索">🔍<\/button>/);
+});
+
+test('runs Dock idle hiding independently from search-box idle hiding', () => {
+  assert.match(html, /body\.dock-idle\.dock-hidden #bm-dock/);
+  assert.doesNotMatch(html, /body\.dock-idle\.searchbox-hidden #bm-dock/);
+  assert.match(script, /var dockIdleTimer = null;/);
+  assert.match(script, /function resetDockIdle\(\)/);
+  assert.match(script, /document\.body\.classList\.add\('dock-hidden'\)/);
+});

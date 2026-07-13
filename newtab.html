@@ -127,6 +127,13 @@
     transition: background .15s, transform .15s;
   }
   button:hover { background: #106ebe; transform: scale(1.08); }
+  .search-icon {
+    width: 20px; height: 20px;
+    fill: none; stroke: currentColor; stroke-width: 1.8;
+    stroke-linecap: round; stroke-linejoin: round;
+    transition: transform .2s cubic-bezier(.2,.8,.2,1);
+  }
+  form button:hover .search-icon { transform: scale(1.06); }
 
   #hint {
     height: 22px; line-height: 22px; margin-top: 10px;
@@ -537,7 +544,7 @@
   body.dock-idle #bm-dock {
     transition: opacity .5s cubic-bezier(.2,.8,.2,1), transform .5s cubic-bezier(.2,.8,.2,1);
   }
-  body.dock-idle.searchbox-hidden #bm-dock {
+  body.dock-idle.dock-hidden #bm-dock {
     opacity: 0; transform: translateX(-50%) translateY(16px); pointer-events: none;
   }
 
@@ -796,7 +803,12 @@
       <div class="border"></div>
       <form id="s">
         <input name="q" type="text" placeholder="在 Bing 上搜索" autocomplete="off" autofocus>
-        <button type="submit" title="搜索">🔍</button>
+        <button type="submit" title="搜索" aria-label="搜索">
+          <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="10.5" cy="10.5" r="6.25"></circle>
+            <path d="M15.2 15.2 20 20"></path>
+          </svg>
+        </button>
       </form>
     </div>
     <div id="hint">请输入搜索内容</div>

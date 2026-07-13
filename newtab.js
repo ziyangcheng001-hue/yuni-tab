@@ -214,6 +214,7 @@ function setSecs(v) {
   idleSecsEl.textContent = idleSecs;
   localStorage.setItem('idleSecs', idleSecs);
   if (idleToggle.checked) resetIdle();
+  if (typeof dockIdleToggle !== 'undefined' && dockIdleToggle.checked) resetDockIdle();
 }
 idleMinus.addEventListener('click', function () {
   setSecs(idleSecs - (idleSecs > 10 ? 5 : 1));
@@ -854,19 +855,53 @@ dockToggle.addEventListener('change', function () {
   }
 });
 
-// ---- Dock 空闲隐藏开关（跟随搜索框空闲计时）----
+// ---- Dock 空闲隐藏开关（独立计时）----
 var dockIdleToggle = document.getElementById('dock-idle-toggle');
+var dockIdleTimer = null;
+var dockActivityEvents = ['mousemove', 'keydown', 'click', 'wheel', 'touchstart'];
+
+function showDock() {
+  document.body.classList.remove('dock-hidden');
+}
+
+function resetDockIdle() {
+  showDock();
+  clearTimeout(dockIdleTimer);
+  if (!dockIdleToggle.checked) return;
+  dockIdleTimer = setTimeout(function () {
+    document.body.classList.add('dock-hidden');
+  }, idleSecs * 1000);
+}
+
+function startDockIdle() {
+  dockActivityEvents.forEach(function (eventName) {
+    document.addEventListener(eventName, resetDockIdle, { passive: true });
+  });
+  resetDockIdle();
+}
+
+function stopDockIdle() {
+  dockActivityEvents.forEach(function (eventName) {
+    document.removeEventListener(eventName, resetDockIdle);
+  });
+  clearTimeout(dockIdleTimer);
+  showDock();
+}
+
 if (localStorage.getItem('dockIdle') === '1') {
   document.body.classList.add('dock-idle');
   dockIdleToggle.checked = true;
+  startDockIdle();
 }
 dockIdleToggle.addEventListener('change', function () {
   if (dockIdleToggle.checked) {
     document.body.classList.add('dock-idle');
     localStorage.setItem('dockIdle', '1');
+    startDockIdle();
   } else {
     document.body.classList.remove('dock-idle');
     localStorage.removeItem('dockIdle');
+    stopDockIdle();
   }
 });
 
