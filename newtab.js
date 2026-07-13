@@ -38,6 +38,11 @@ input.addEventListener('input', function () {
   timer = setTimeout(function () { fetchSuggest(val); }, 200);
 });
 
+input.addEventListener('focus', function () {
+  var val = input.value.trim();
+  if (val) fetchSuggest(val);
+});
+
 function fetchSuggest(q) {
   var requestEngine = activeEngine;
   var requestId = ++suggestRequestId;

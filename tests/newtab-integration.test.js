@@ -58,3 +58,10 @@ test('runs Dock idle hiding independently from search-box idle hiding', () => {
   assert.match(script, /function resetDockIdle\(\)/);
   assert.match(script, /document\.body\.classList\.add\('dock-hidden'\)/);
 });
+
+test('reloads suggestions when a non-empty search input regains focus', () => {
+  assert.match(
+    script,
+    /input\.addEventListener\('focus', function \(\) \{\s*var val = input\.value\.trim\(\);\s*if \(val\) fetchSuggest\(val\);\s*\}\);/
+  );
+});
