@@ -3,6 +3,8 @@
 屿你自定义浏览器新标签页 —— 液态玻璃搜索框 · 旋转辉光边框 · 动态视频壁纸库 · Bing 搜索建议下拉
 
 A liquid-glass browser startpage with dynamic video wallpapers, rotating glow border, and Bing-powered search suggestions.
+官方微软扩展直安链接：https://microsoftedge.microsoft.com/addons/detail/fgocmklahggbekpmbfjdpelddkpdfdbm
+记得好评
 
 ---
 
